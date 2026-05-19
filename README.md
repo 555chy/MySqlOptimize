@@ -85,20 +85,26 @@ run_db_creator.bat
 java -jar target/mySqlparse-1.0-SNAPSHOT.jar --init-db
 
 # 初始化测试数据库，自定义数据行数
-java -jar target/mySqlparse-1.0-SNAPSHOT.jar --init-db --rows 1000000
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --init-db --rows 500000
 
 # 使用指定数据库并自定义行数
-java -jar target/mySqlparse-1.0-SNAPSHOT.jar --init-db -db jdbc:sqlite:test.db --rows 50000
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --init-db -db jdbc:sqlite:test.db --rows 500000
 
 # ========================================
 # 2. 运行完整测试套件
 # ========================================
 
-# 运行完整测试套件（初始化数据库 + 运行100条SQL测试 + 生成报告）
+# 使用默认的 test_queries_100.sql（100条SQL测试）
 java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test
 
-# 运行测试套件，自定义数据行数
-java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test --rows 1000
+# 使用 test_queries_3.sql（3条SQL测试）
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_queries_3.sql
+
+# 使用 test_queries_100.sql
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_queries_100.sql
+
+# 同时指定数据库和测试文件
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_queries_3.sql -db jdbc:sqlite:test.db
 
 # ========================================
 # 3. 优化SQL语句

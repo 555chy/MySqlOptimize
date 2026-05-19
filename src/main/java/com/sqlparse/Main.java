@@ -12,8 +12,10 @@ import net.sf.jsqlparser.JSQLParserException;
 import org.apache.commons.cli.*;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -37,7 +39,9 @@ public class Main {
             }
 
             if (cmd.hasOption("test")) {
-                runTestSuite(cmd.getOptionValue("db", "jdbc:sqlite:test.db"));
+                String testFile = cmd.getOptionValue("test", "test_queries_100.sql");
+                String dbUrl = cmd.getOptionValue("db", "jdbc:sqlite:test.db");
+                runTestSuite(dbUrl, testFile);
                 return;
             }
 
@@ -91,7 +95,8 @@ public class Main {
         List<String> queries = new ArrayList<>();
         StringBuilder currentQuery = new StringBuilder();
         
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(filePath), "UTF-8"))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -110,6 +115,8 @@ public class Main {
                 }
                 currentQuery.append(line).append(" ");
             }
+        } catch (UnsupportedEncodingException e) {
+            throw new IOException("不支持的编码: UTF-8", e);
         }
         
         if (currentQuery.length() > 0) {
@@ -156,7 +163,9 @@ public class Main {
 
         options.addOption(Option.builder()
                 .longOpt("test")
-                .desc("运行完整的测试套件")
+                .hasArg()
+                .argName("file")
+                .desc("运行完整的测试套件 (可选: 指定SQL文件, 如 test_queries_3.sql 或 test_queries_100.sql)")
                 .build());
 
         options.addOption(Option.builder()
@@ -174,7 +183,7 @@ public class Main {
         return options;
     }
 
-    private static void runTestSuite(String dbUrl) {
+    private static void runTestSuite(String dbUrl, String testFile) {
         System.out.println("========================================");
         System.out.println("  运行完整的测试套件");
         System.out.println("========================================\n");
@@ -182,8 +191,8 @@ public class Main {
         try {
             initializeTestDatabase(dbUrl, 100);
             
-            List<String> sqlList = loadSqlFromFile("test_queries_100.sql");
-            System.out.println("\n从test_queries_100.sql加载了 " + sqlList.size() + " 条SQL进行测试\n");
+            List<String> sqlList = loadSqlFromFile(testFile);
+            System.out.println("\n从 " + testFile + " 加载了 " + sqlList.size() + " 条SQL进行测试\n");
             
             int successCount = 0;
             int failCount = 0;
