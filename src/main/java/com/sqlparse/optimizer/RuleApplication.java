@@ -3,18 +3,24 @@ package com.sqlparse.optimizer;
 import java.time.LocalDateTime;
 
 public class RuleApplication {
+    private int ruleId;
     private String ruleName;
     private String ruleDescription;
     private LocalDateTime applicationTime;
     private String location;
     private boolean applied;
 
-    public RuleApplication(String ruleName, String ruleDescription, String location, boolean applied) {
+    public RuleApplication(int ruleId, String ruleName, String ruleDescription, String location, boolean applied) {
+        this.ruleId = ruleId;
         this.ruleName = ruleName;
         this.ruleDescription = ruleDescription;
         this.applicationTime = LocalDateTime.now();
         this.location = location;
         this.applied = applied;
+    }
+
+    public int getRuleId() {
+        return ruleId;
     }
 
     public String getRuleName() {

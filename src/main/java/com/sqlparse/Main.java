@@ -7,6 +7,7 @@ import com.sqlparse.optimizer.OptimizationResult;
 import com.sqlparse.optimizer.RuleApplication;
 import com.sqlparse.testdata.EcommerceSchemaGenerator;
 import com.sqlparse.testdata.TestDataGenerator;
+import com.sqlparse.validator.QueryResult;
 import com.sqlparse.validator.ResultValidator;
 import net.sf.jsqlparser.JSQLParserException;
 import org.apache.commons.cli.*;
@@ -41,7 +42,9 @@ public class Main {
             if (cmd.hasOption("test")) {
                 String testFile = cmd.getOptionValue("test", "test_queries_100.sql");
                 String dbUrl = cmd.getOptionValue("db", "jdbc:sqlite:test.db");
-                runTestSuite(dbUrl, testFile);
+                boolean verbose = cmd.hasOption("v");
+                boolean validate = cmd.hasOption("validate");
+                runTestSuite(dbUrl, testFile, verbose, validate);
                 return;
             }
 
@@ -183,7 +186,7 @@ public class Main {
         return options;
     }
 
-    private static void runTestSuite(String dbUrl, String testFile) {
+    private static void runTestSuite(String dbUrl, String testFile, boolean verbose, boolean validate) {
         System.out.println("========================================");
         System.out.println("  运行完整的测试套件");
         System.out.println("========================================\n");
@@ -196,37 +199,131 @@ public class Main {
             
             int successCount = 0;
             int failCount = 0;
+            int optimizedCount = 0;
+            int consistentCount = 0;
+            long totalOriginalTime = 0;
+            long totalOptimizedTime = 0;
             
             for (int i = 0; i < sqlList.size(); i++) {
                 String sql = sqlList.get(i);
-                System.out.println("测试 [" + (i + 1) + "/" + sqlList.size() + "]: " + sql.substring(0, Math.min(50, sql.length())) + "...");
+                String sqlPreview = sql.length() > 60 ? sql.substring(0, 60) + "..." : sql;
+                System.out.println("\n" + "=".repeat(60));
+                System.out.println("测试 [" + (i + 1) + "/" + sqlList.size() + "]");
+                System.out.println("=".repeat(60));
                 
                 try {
                     DatabaseConnectionManager connectionManager = new DatabaseConnectionManager(dbUrl);
                     SqlOptimizer optimizer = new SqlOptimizer();
                     
                     OptimizationResult result = optimizer.optimize(sql);
+                    String optimizedSql = result.getOptimizedSql();
                     
-                    if (!sql.equals(result.getOptimizedSql())) {
-                        successCount++;
-                        System.out.println("  ✓ 优化成功，应用了 " + result.getAppliedRuleCount() + " 条规则");
+                    int appliedRules = 0;
+                    for (RuleApplication app : result.getAppliedRules()) {
+                        if (app.isApplied()) {
+                            appliedRules++;
+                        }
+                    }
+                    
+                    if (verbose) {
+                        System.out.println("\n--- 原始SQL ---");
+                        System.out.println(sql);
+                        System.out.println("\n--- 优化后SQL ---");
+                        System.out.println(optimizedSql);
+                    }
+                    
+                    if (!sql.equals(optimizedSql)) {
+                        optimizedCount++;
+                        System.out.println("\n[优化结果] ✓ 优化成功，应用了 " + appliedRules + " 条规则");
+                        
+                        if (verbose) {
+                            System.out.println("\n[详细规则列表]");
+                            for (RuleApplication app : result.getAppliedRules()) {
+                                if (app.isApplied()) {
+                                    System.out.printf("  #%02d ✓ %s - %s%n", 
+                                        app.getRuleId(), app.getRuleName(), app.getRuleDescription());
+                                }
+                            }
+                        }
+                        
+                        if (validate) {
+                            System.out.println("\n[验证结果]");
+                            ResultValidator validator = new ResultValidator(connectionManager);
+                            ResultValidator.QueryResultWithStats stats1 = validator.executeQueryWithStats(sql);
+                            ResultValidator.QueryResultWithStats stats2 = validator.executeQueryWithStats(optimizedSql);
+                            
+                            totalOriginalTime += stats1.getExecutionTimeNanos();
+                            totalOptimizedTime += stats2.getExecutionTimeNanos();
+                            
+                            if (stats1.isSuccess() && stats2.isSuccess()) {
+                                QueryResult qr1 = stats1.getQueryResult();
+                                QueryResult qr2 = stats2.getQueryResult();
+                                
+                                System.out.printf("  原始SQL: %d 行, %d 列 | 耗时: %d 纳秒%n",
+                                    qr1.getRowCount(), qr1.getColumnCount(), stats1.getExecutionTimeNanos());
+                                System.out.printf("  优化SQL: %d 行, %d 列 | 耗时: %d 纳秒%n",
+                                    qr2.getRowCount(), qr2.getColumnCount(), stats2.getExecutionTimeNanos());
+                                
+                                if (qr1.getRowCount() == qr2.getRowCount() && qr1.getColumnCount() == qr2.getColumnCount()) {
+                                    boolean consistent = true;
+                                    for (int r = 0; r < qr1.getRowCount() && consistent; r++) {
+                                        if (!qr1.getRow(r).equals(qr2.getRow(r))) {
+                                            consistent = false;
+                                        }
+                                    }
+                                    if (consistent) {
+                                        consistentCount++;
+                                        System.out.println("  数据一致性: ✓ 一致");
+                                    } else {
+                                        System.out.println("  数据一致性: ✗ 不一致");
+                                    }
+                                } else {
+                                    System.out.println("  数据一致性: ✗ 行数或列数不一致");
+                                }
+                                
+                                long timeDiff = stats1.getExecutionTimeNanos() - stats2.getExecutionTimeNanos();
+                                double improvement = stats1.getExecutionTimeNanos() > 0 ? 
+                                    (double) timeDiff / stats1.getExecutionTimeNanos() * 100 : 0;
+                                if (improvement > 0) {
+                                    System.out.printf("  性能提升: %.1f%% (节省 %d 纳秒)%n", improvement, timeDiff);
+                                } else {
+                                    System.out.printf("  性能变化: %.1f%% (增加 %d 纳秒)%n", -improvement, -timeDiff);
+                                }
+                            } else {
+                                System.out.println("  SQL执行失败:");
+                                if (!stats1.isSuccess()) {
+                                    System.out.println("    原始SQL错误: " + stats1.getErrorMessage());
+                                }
+                                if (!stats2.isSuccess()) {
+                                    System.out.println("    优化SQL错误: " + stats2.getErrorMessage());
+                                }
+                            }
+                        }
                     } else {
-                        System.out.println("  - 无需优化");
+                        System.out.println("\n[优化结果] - 无需优化");
                     }
                     
                     connectionManager.closeConnection();
                 } catch (Exception e) {
                     failCount++;
-                    System.out.println("  ✗ 失败: " + e.getMessage());
+                    System.out.println("\n[错误] ✗ " + e.getMessage());
                 }
             }
             
-            System.out.println("\n========================================");
+            System.out.println("\n" + "=".repeat(60));
             System.out.println("  测试完成！");
-            System.out.println("========================================");
-            System.out.println("总SQL数: " + sqlList.size());
-            System.out.println("优化成功: " + successCount);
-            System.out.println("执行失败: " + failCount);
+            System.out.println("=".repeat(60));
+            System.out.println("\n统计信息:");
+            System.out.println("  总SQL数: " + sqlList.size());
+            System.out.println("  优化成功: " + optimizedCount);
+            System.out.println("  执行失败: " + failCount);
+            if (validate && consistentCount > 0) {
+                System.out.println("  结果一致: " + consistentCount + "/" + optimizedCount);
+                if (totalOriginalTime > 0) {
+                    double totalImprovement = (double) (totalOriginalTime - totalOptimizedTime) / totalOriginalTime * 100;
+                    System.out.printf("  总体性能提升: %.1f%%%n", totalImprovement);
+                }
+            }
             
         } catch (Exception e) {
             System.err.println("测试运行失败: " + e.getMessage());

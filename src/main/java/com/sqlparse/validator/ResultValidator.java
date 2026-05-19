@@ -18,8 +18,22 @@ public class ResultValidator {
         ValidationResult result = new ValidationResult();
 
         try {
-            QueryResult queryResult1 = executeQuery(sql1);
-            QueryResult queryResult2 = executeQuery(sql2);
+            QueryResultWithStats stats1 = executeQueryWithStats(sql1);
+            QueryResultWithStats stats2 = executeQueryWithStats(sql2);
+            
+            if (!stats1.isSuccess()) {
+                result.setConsistent(false);
+                result.setMessage("原始SQL执行异常: " + stats1.getErrorMessage());
+                return result;
+            }
+            if (!stats2.isSuccess()) {
+                result.setConsistent(false);
+                result.setMessage("优化SQL执行异常: " + stats2.getErrorMessage());
+                return result;
+            }
+            
+            QueryResult queryResult1 = stats1.getQueryResult();
+            QueryResult queryResult2 = stats2.getQueryResult();
 
             result.setQueryResult1(queryResult1);
             result.setQueryResult2(queryResult2);
@@ -53,7 +67,7 @@ public class ResultValidator {
             result.setConsistent(true);
             result.setMessage("结果完全一致");
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
             result.setConsistent(false);
             result.setMessage("SQL执行异常: " + e.getMessage());
         }
@@ -61,11 +75,63 @@ public class ResultValidator {
         return result;
     }
 
-    public QueryResult executeQuery(String sql) throws SQLException {
-        Connection connection = connectionManager.getConnection();
-        try (Statement statement = connection.createStatement();
-             ResultSet resultSet = statement.executeQuery(sql)) {
-            return QueryResult.fromResultSet(resultSet);
+    public QueryResultWithStats executeQueryWithStats(String sql) {
+        QueryResultWithStats stats = new QueryResultWithStats();
+        long startTime = System.nanoTime();
+        
+        try {
+            Connection connection = connectionManager.getConnection();
+            try (Statement statement = connection.createStatement();
+                 ResultSet resultSet = statement.executeQuery(sql)) {
+                QueryResult queryResult = QueryResult.fromResultSet(resultSet);
+                stats.setQueryResult(queryResult);
+                stats.setSuccess(true);
+            }
+        } catch (SQLException e) {
+            stats.setSuccess(false);
+            stats.setErrorMessage(e.getMessage());
+        }
+        
+        stats.setExecutionTimeNanos(System.nanoTime() - startTime);
+        return stats;
+    }
+    
+    public static class QueryResultWithStats {
+        private QueryResult queryResult;
+        private long executionTimeNanos;
+        private boolean success;
+        private String errorMessage;
+        
+        public QueryResult getQueryResult() {
+            return queryResult;
+        }
+        
+        public void setQueryResult(QueryResult queryResult) {
+            this.queryResult = queryResult;
+        }
+        
+        public long getExecutionTimeNanos() {
+            return executionTimeNanos;
+        }
+        
+        public void setExecutionTimeNanos(long executionTimeNanos) {
+            this.executionTimeNanos = executionTimeNanos;
+        }
+        
+        public boolean isSuccess() {
+            return success;
+        }
+        
+        public void setSuccess(boolean success) {
+            this.success = success;
+        }
+        
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+        
+        public void setErrorMessage(String errorMessage) {
+            this.errorMessage = errorMessage;
         }
     }
 

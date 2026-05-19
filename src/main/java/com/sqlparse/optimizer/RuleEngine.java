@@ -55,11 +55,13 @@ public class RuleEngine {
         log.log("Starting optimization process");
 
         Statement current = statement;
+        int ruleId = 1;
         for (OptimizationRule rule : rules) {
             if (rule.canApply(current, context)) {
                 log.log(rule.getName(), "Query", "Applying rule");
                 Statement optimized = rule.apply(current, context);
                 RuleApplication application = new RuleApplication(
+                        ruleId,
                         rule.getName(),
                         rule.getDescription(),
                         "Query",
@@ -70,6 +72,7 @@ public class RuleEngine {
                 log.log(rule.getName(), "Query", "Rule applied successfully");
             } else {
                 RuleApplication application = new RuleApplication(
+                        ruleId,
                         rule.getName(),
                         rule.getDescription(),
                         "Query",
@@ -77,6 +80,7 @@ public class RuleEngine {
                 );
                 result.addAppliedRule(application);
             }
+            ruleId++;
         }
 
         result.setOptimizedStatement(current);
