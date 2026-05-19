@@ -1,4 +1,5 @@
 -- Test SQL Queries for SQL Parser (3 queries for quick testing)
+-- Optimized for SQLite syntax
 
 -- Query 1: User Lifetime Value and Purchase Behavior Analysis
 WITH user_purchases AS (
@@ -16,15 +17,15 @@ WITH user_purchases AS (
         SUM(o.total_amount) / NULLIF(COUNT(o.order_id), 0) AS avg_ltv_per_order,
         MAX(o.order_date) AS last_purchase_date,
         MIN(o.order_date) AS first_purchase_date,
-        DATEDIFF(CURRENT_DATE, MAX(o.order_date)) AS days_since_last_purchase,
-        DATEDIFF(MAX(o.order_date), MIN(o.order_date)) AS customer_tenure_days
+        CAST(julianday('now') - julianday(MAX(o.order_date)) AS INTEGER) AS days_since_last_purchase,
+        CAST(julianday(MAX(o.order_date)) - julianday(MIN(o.order_date)) AS INTEGER) AS customer_tenure_days
     FROM users u
     INNER JOIN orders o ON u.user_id = o.user_id
     INNER JOIN order_items oi ON o.order_id = oi.order_id
     INNER JOIN products p ON oi.product_id = p.product_id
     INNER JOIN categories c ON p.category_id = c.category_id
     WHERE o.order_status IN ('completed', 'shipped', 'delivered')
-        AND o.order_date >= DATE_SUB(CURRENT_DATE, INTERVAL 365 DAY)
+        AND o.order_date >= date('now', '-365 days')
         AND u.status = 'active'
     GROUP BY u.user_id, u.username, u.email, u.registration_date, u.city, u.region, u.tier
 ),
@@ -106,9 +107,9 @@ WITH product_metrics AS (
     INNER JOIN order_items oi ON p.product_id = oi.product_id
     INNER JOIN orders o ON oi.order_id = o.order_id
     WHERE o.order_status IN ('completed', 'shipped', 'delivered')
-        AND o.order_date >= DATE_SUB(CURRENT_DATE, INTERVAL 90 DAY)
+        AND o.order_date >= date('now', '-90 days')
         AND p.status = 'active'
-        AND p.is_deleted = FALSE
+        AND p.is_deleted = 0
     GROUP BY p.product_id, p.product_name, p.sku, p.price, p.cost, p.stock_quantity,
              p.reorder_point, p.category_id, c.category_name, c.parent_category_id,
              pc.category_name, b.brand_id, b.brand_name
@@ -191,13 +192,13 @@ WITH order_fulfillment AS (
         o.payment_status,
         o.shipping_method,
         o.tracking_number,
-        DATEDIFF(o.shipped_date, o.order_date) AS processing_time_days,
-        DATEDIFF(o.delivered_date, o.shipped_date) AS shipping_time_days,
-        DATEDIFF(o.delivered_date, o.order_date) AS total_delivery_time_days,
+        CAST(julianday(o.shipped_date) - julianday(o.order_date) AS INTEGER) AS processing_time_days,
+        CAST(julianday(o.delivered_date) - julianday(o.shipped_date) AS INTEGER) AS shipping_time_days,
+        CAST(julianday(o.delivered_date) - julianday(o.order_date) AS INTEGER) AS total_delivery_time_days,
         CASE
-            WHEN o.order_status = 'delivered' THEN DATEDIFF(o.delivered_date, o.order_date)
-            WHEN o.order_status = 'shipped' THEN DATEDIFF(CURRENT_DATE, o.order_date)
-            ELSE DATEDIFF(CURRENT_DATE, o.order_date)
+            WHEN o.order_status = 'delivered' THEN CAST(julianday(o.delivered_date) - julianday(o.order_date) AS INTEGER)
+            WHEN o.order_status = 'shipped' THEN CAST(julianday('now') - julianday(o.order_date) AS INTEGER)
+            ELSE CAST(julianday('now') - julianday(o.order_date) AS INTEGER)
         END AS actual_delivery_days,
         CASE
             WHEN o.shipping_method = 'express' THEN 2
@@ -206,14 +207,14 @@ WITH order_fulfillment AS (
             WHEN o.shipping_method = 'economy' THEN 7
             ELSE 5
         END AS promised_delivery_days,
-        DATEDIFF(CURRENT_DATE, o.order_date) AS days_since_order,
+        CAST(julianday('now') - julianday(o.order_date) AS INTEGER) AS days_since_order,
         COUNT(oi.order_item_id) AS item_count,
         SUM(oi.quantity) AS total_items,
         SUM(oi.quantity * oi.unit_price) AS item_subtotal
     FROM orders o
     INNER JOIN users u ON o.user_id = u.user_id
     INNER JOIN order_items oi ON o.order_id = oi.order_id
-    WHERE o.order_date >= DATE_SUB(CURRENT_DATE, INTERVAL 180 DAY)
+    WHERE o.order_date >= date('now', '-180 days')
         AND o.order_status IN ('pending', 'processing', 'shipped', 'delivered', 'completed')
     GROUP BY o.order_id, o.order_number, o.user_id, u.username, u.email, u.city, u.region,
              o.order_date, o.shipped_date, o.delivered_date, o.order_status, o.total_amount,
