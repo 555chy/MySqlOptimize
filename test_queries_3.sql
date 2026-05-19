@@ -7,10 +7,10 @@ WITH user_purchases AS (
         u.user_id,
         u.username,
         u.email,
-        u.registration_date,
+        u.created_at AS registration_date,
         u.city,
-        u.region,
-        u.tier,
+        u.state_province,
+        u.loyalty_tier AS tier,
         COUNT(o.order_id) AS total_orders,
         SUM(o.total_amount) AS total_spent,
         AVG(o.total_amount) AS avg_order_value,
@@ -24,10 +24,10 @@ WITH user_purchases AS (
     INNER JOIN order_items oi ON o.order_id = oi.order_id
     INNER JOIN products p ON oi.product_id = p.product_id
     INNER JOIN categories c ON p.category_id = c.category_id
-    WHERE o.order_status IN ('completed', 'shipped', 'delivered')
+    WHERE o.order_status IN ('pending', 'processing', 'shipped', 'delivered', 'completed')
         AND o.order_date >= date('now', '-365 days')
-        AND u.status = 'active'
-    GROUP BY u.user_id, u.username, u.email, u.registration_date, u.city, u.region, u.tier
+        AND u.is_active = 1
+    GROUP BY u.user_id, u.username, u.email, u.created_at, u.city, u.state_province, u.loyalty_tier
 ),
 user_segments AS (
     SELECT
@@ -53,7 +53,7 @@ SELECT
     us.username,
     us.email,
     us.city,
-    us.region,
+    us.state_province,
     us.tier,
     us.total_orders,
     us.total_spent,
@@ -80,9 +80,9 @@ WITH product_metrics AS (
         p.product_name,
         p.sku,
         p.price,
-        p.cost,
+        p.cost_price AS cost,
         p.stock_quantity,
-        p.reorder_point,
+        p.reorder_threshold AS reorder_point,
         p.category_id,
         c.category_name,
         c.parent_category_id,
@@ -92,8 +92,8 @@ WITH product_metrics AS (
         COUNT(DISTINCT oi.order_id) AS order_count,
         SUM(oi.quantity) AS total_quantity_sold,
         SUM(oi.quantity * oi.unit_price) AS gross_revenue,
-        SUM(oi.quantity * p.cost) AS total_cost,
-        SUM(oi.quantity * (oi.unit_price - p.cost)) AS gross_profit,
+        SUM(oi.quantity * p.cost_price) AS total_cost,
+        SUM(oi.quantity * (oi.unit_price - p.cost_price)) AS gross_profit,
         AVG(oi.unit_price) AS avg_selling_price,
         MIN(oi.unit_price) AS min_selling_price,
         MAX(oi.unit_price) AS max_selling_price,
@@ -106,21 +106,16 @@ WITH product_metrics AS (
     INNER JOIN brands b ON p.brand_id = b.brand_id
     INNER JOIN order_items oi ON p.product_id = oi.product_id
     INNER JOIN orders o ON oi.order_id = o.order_id
-    WHERE o.order_status IN ('completed', 'shipped', 'delivered')
+    WHERE o.order_status IN ('pending', 'processing', 'shipped', 'delivered', 'completed')
         AND o.order_date >= date('now', '-90 days')
-        AND p.status = 'active'
-        AND p.is_deleted = 0
-    GROUP BY p.product_id, p.product_name, p.sku, p.price, p.cost, p.stock_quantity,
-             p.reorder_point, p.category_id, c.category_name, c.parent_category_id,
+        AND p.is_active = 1
+    GROUP BY p.product_id, p.product_name, p.sku, p.price, p.cost_price, p.stock_quantity,
+             p.reorder_threshold, p.category_id, c.category_name, c.parent_category_id,
              pc.category_name, b.brand_id, b.brand_name
 ),
 product_rankings AS (
     SELECT
         pm.*,
-        RANK() OVER (PARTITION BY pm.category_id ORDER BY pm.gross_revenue DESC) AS category_rank,
-        RANK() OVER (PARTITION BY pm.parent_category_id ORDER BY pm.gross_revenue DESC) AS parent_category_rank,
-        RANK() OVER (PARTITION BY pm.brand_id ORDER BY pm.total_quantity_sold DESC) AS brand_rank,
-        DENSE_RANK() OVER (ORDER BY pm.gross_revenue DESC) AS overall_rank,
         CASE
             WHEN pm.stock_quantity <= pm.reorder_point THEN 'Low Stock'
             WHEN pm.stock_quantity <= pm.reorder_point * 2 THEN 'Medium Stock'
@@ -156,10 +151,6 @@ SELECT
     pr.unique_customers,
     pr.last_sale_date,
     pr.first_sale_date,
-    pr.category_rank,
-    pr.parent_category_rank,
-    pr.brand_rank,
-    pr.overall_rank,
     pr.stock_status,
     pr.margin_category
 FROM product_rankings pr
@@ -178,33 +169,33 @@ WITH order_fulfillment AS (
         o.user_id,
         u.username,
         u.email,
-        u.city AS customer_city,
-        u.region AS customer_region,
+        o.shipping_city AS customer_city,
+        o.shipping_state_province AS customer_region,
         o.order_date,
-        o.shipped_date,
-        o.delivered_date,
+        o.status_updated_at AS shipped_date,
+        o.completed_at AS delivered_date,
         o.order_status,
         o.total_amount,
-        o.shipping_cost,
+        o.shipping_amount,
         o.tax_amount,
         o.discount_amount,
-        o.payment_method,
+        o.coupon_code AS payment_method,
         o.payment_status,
-        o.shipping_method,
+        o.shipping_method_name AS shipping_method,
         o.tracking_number,
-        CAST(julianday(o.shipped_date) - julianday(o.order_date) AS INTEGER) AS processing_time_days,
-        CAST(julianday(o.delivered_date) - julianday(o.shipped_date) AS INTEGER) AS shipping_time_days,
-        CAST(julianday(o.delivered_date) - julianday(o.order_date) AS INTEGER) AS total_delivery_time_days,
+        CAST(julianday(o.status_updated_at) - julianday(o.order_date) AS INTEGER) AS processing_time_days,
+        CAST(julianday(o.completed_at) - julianday(o.status_updated_at) AS INTEGER) AS shipping_time_days,
+        CAST(julianday(o.completed_at) - julianday(o.order_date) AS INTEGER) AS total_delivery_time_days,
         CASE
-            WHEN o.order_status = 'delivered' THEN CAST(julianday(o.delivered_date) - julianday(o.order_date) AS INTEGER)
+            WHEN o.order_status = 'delivered' THEN CAST(julianday(o.completed_at) - julianday(o.order_date) AS INTEGER)
             WHEN o.order_status = 'shipped' THEN CAST(julianday('now') - julianday(o.order_date) AS INTEGER)
             ELSE CAST(julianday('now') - julianday(o.order_date) AS INTEGER)
         END AS actual_delivery_days,
         CASE
-            WHEN o.shipping_method = 'express' THEN 2
-            WHEN o.shipping_method = 'priority' THEN 3
-            WHEN o.shipping_method = 'standard' THEN 5
-            WHEN o.shipping_method = 'economy' THEN 7
+            WHEN o.shipping_method_name LIKE '%express%' THEN 2
+            WHEN o.shipping_method_name LIKE '%priority%' THEN 3
+            WHEN o.shipping_method_name LIKE '%standard%' THEN 5
+            WHEN o.shipping_method_name LIKE '%economy%' THEN 7
             ELSE 5
         END AS promised_delivery_days,
         CAST(julianday('now') - julianday(o.order_date) AS INTEGER) AS days_since_order,
@@ -216,10 +207,10 @@ WITH order_fulfillment AS (
     INNER JOIN order_items oi ON o.order_id = oi.order_id
     WHERE o.order_date >= date('now', '-180 days')
         AND o.order_status IN ('pending', 'processing', 'shipped', 'delivered', 'completed')
-    GROUP BY o.order_id, o.order_number, o.user_id, u.username, u.email, u.city, u.region,
-             o.order_date, o.shipped_date, o.delivered_date, o.order_status, o.total_amount,
-             o.shipping_cost, o.tax_amount, o.discount_amount, o.payment_method, o.payment_status,
-             o.shipping_method, o.tracking_number
+    GROUP BY o.order_id, o.order_number, o.user_id, u.username, u.email, o.shipping_city, o.shipping_state_province,
+             o.order_date, o.status_updated_at, o.completed_at, o.order_status, o.total_amount,
+             o.shipping_amount, o.tax_amount, o.discount_amount, o.coupon_code, o.payment_status,
+             o.shipping_method_name, o.tracking_number
 ),
 fulfillment_metrics AS (
     SELECT
@@ -243,7 +234,6 @@ fulfillment_metrics AS (
             WHEN of1.actual_delivery_days <= of1.promised_delivery_days + 2 THEN 'Slightly Exceeded Promise'
             ELSE 'Significantly Exceeded Promise'
         END AS promise_adherence,
-        RANK() OVER (PARTITION BY of1.order_status ORDER BY of1.actual_delivery_days) AS delivery_tier,
         AVG(of1.processing_time_days) OVER () AS avg_processing_time,
         AVG(of1.shipping_time_days) OVER () AS avg_shipping_time,
         AVG(of1.total_amount) OVER () AS avg_order_value
@@ -261,7 +251,7 @@ SELECT
     fm.delivered_date,
     fm.order_status,
     fm.total_amount,
-    fm.shipping_cost,
+    fm.shipping_amount,
     fm.tax_amount,
     fm.discount_amount,
     fm.payment_method,
@@ -280,7 +270,6 @@ SELECT
     fm.processing_performance,
     fm.delivery_performance,
     fm.promise_adherence,
-    fm.delivery_tier,
     fm.avg_processing_time,
     fm.avg_shipping_time,
     fm.avg_order_value
