@@ -200,6 +200,7 @@ public class Main {
             int successCount = 0;
             int failCount = 0;
             int optimizedCount = 0;
+            int queryExecutionFailCount = 0;
             int consistentCount = 0;
             long totalOriginalTime = 0;
             long totalOptimizedTime = 0;
@@ -290,6 +291,7 @@ public class Main {
                                     System.out.printf("  性能变化: %.1f%% (增加 %d 纳秒)%n", -improvement, -timeDiff);
                                 }
                             } else {
+                                queryExecutionFailCount++;
                                 System.out.println("  SQL执行失败:");
                                 if (!stats1.isSuccess()) {
                                     System.out.println("    原始SQL错误: " + stats1.getErrorMessage());
@@ -315,8 +317,9 @@ public class Main {
             System.out.println("=".repeat(60));
             System.out.println("\n统计信息:");
             System.out.println("  总SQL数: " + sqlList.size());
-            System.out.println("  优化成功: " + optimizedCount);
-            System.out.println("  执行失败: " + failCount);
+            System.out.println("  规则优化成功: " + optimizedCount);
+            System.out.println("  查询执行失败: " + queryExecutionFailCount);
+            System.out.println("  系统异常: " + failCount);
             if (validate && consistentCount > 0) {
                 System.out.println("  结果一致: " + consistentCount + "/" + optimizedCount);
                 if (totalOriginalTime > 0) {
