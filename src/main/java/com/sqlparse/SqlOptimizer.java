@@ -1,6 +1,8 @@
 package com.sqlparse;
 
 import com.sqlparse.metadata.DatabaseMetadata;
+import com.sqlparse.optimizer.DatabaseFunctionMapper;
+import com.sqlparse.optimizer.DatabaseType;
 import com.sqlparse.optimizer.OptimizationContext;
 import com.sqlparse.optimizer.OptimizationResult;
 import com.sqlparse.optimizer.RuleEngine;
@@ -12,14 +14,29 @@ import java.util.Arrays;
 public class SqlOptimizer {
     private RuleEngine ruleEngine;
     private OptimizationContext context;
+    private DatabaseType databaseType;
 
     public SqlOptimizer() {
-        this.context = new OptimizationContext();
+        this.databaseType = DatabaseType.MYSQL;
+        this.context = new OptimizationContext(this.databaseType);
         initializeRuleEngine();
     }
 
     public SqlOptimizer(DatabaseMetadata metadata) {
-        this.context = new OptimizationContext(metadata);
+        this.databaseType = DatabaseType.MYSQL;
+        this.context = new OptimizationContext(metadata, this.databaseType);
+        initializeRuleEngine();
+    }
+
+    public SqlOptimizer(DatabaseType databaseType) {
+        this.databaseType = databaseType;
+        this.context = new OptimizationContext(this.databaseType);
+        initializeRuleEngine();
+    }
+
+    public SqlOptimizer(DatabaseMetadata metadata, DatabaseType databaseType) {
+        this.databaseType = databaseType;
+        this.context = new OptimizationContext(metadata, this.databaseType);
         initializeRuleEngine();
     }
 
@@ -52,11 +69,26 @@ public class SqlOptimizer {
     }
 
     public OptimizationResult optimize(String sql) throws JSQLParserException {
-        return ruleEngine.optimize(sql);
+        String normalizedSql = DatabaseFunctionMapper.mapFunctions(sql, databaseType);
+        OptimizationResult result = ruleEngine.optimize(normalizedSql);
+        
+        String finalSql = DatabaseFunctionMapper.mapFunctions(result.getOptimizedSql(), databaseType);
+        result.setOptimizedSql(finalSql);
+        
+        return result;
     }
 
     public void setMetadata(DatabaseMetadata metadata) {
         this.context.setDatabaseMetadata(metadata);
+    }
+
+    public void setDatabaseType(DatabaseType databaseType) {
+        this.databaseType = databaseType;
+        this.context.setDatabaseType(databaseType);
+    }
+
+    public DatabaseType getDatabaseType() {
+        return databaseType;
     }
 
     public RuleEngine getRuleEngine() {

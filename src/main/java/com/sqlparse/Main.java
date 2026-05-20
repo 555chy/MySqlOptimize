@@ -3,6 +3,7 @@ package com.sqlparse;
 import com.sqlparse.metadata.DatabaseConnectionManager;
 import com.sqlparse.metadata.DatabaseMetadata;
 import com.sqlparse.metadata.MetadataFetcher;
+import com.sqlparse.optimizer.DatabaseType;
 import com.sqlparse.optimizer.OptimizationResult;
 import com.sqlparse.optimizer.RuleApplication;
 import com.sqlparse.testdata.EcommerceSchemaGenerator;
@@ -214,7 +215,8 @@ public class Main {
                 
                 try {
                     DatabaseConnectionManager connectionManager = new DatabaseConnectionManager(dbUrl);
-                    SqlOptimizer optimizer = new SqlOptimizer();
+                    DatabaseType dbType = DatabaseType.fromJdbcUrl(dbUrl);
+                    SqlOptimizer optimizer = new SqlOptimizer(dbType);
                     
                     OptimizationResult result = optimizer.optimize(sql);
                     String optimizedSql = result.getOptimizedSql();
@@ -351,7 +353,8 @@ public class Main {
 
     private static void processSqlOptimization(String dbUrl, List<String> sqlList, boolean verbose, boolean validate) {
         DatabaseConnectionManager connectionManager = new DatabaseConnectionManager(dbUrl);
-        SqlOptimizer optimizer = new SqlOptimizer();
+        DatabaseType dbType = DatabaseType.fromJdbcUrl(dbUrl);
+        SqlOptimizer optimizer = new SqlOptimizer(dbType);
         
         try {
             DatabaseMetadata metadata = null;
