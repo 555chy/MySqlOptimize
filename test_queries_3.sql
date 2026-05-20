@@ -1,5 +1,5 @@
 -- Test SQL Queries for SQL Parser (3 queries for quick testing)
--- Optimized for SQLite syntax
+-- Optimized for SQLite syntax based on actual schema
 
 -- Query 1: User Lifetime Value and Purchase Behavior Analysis
 WITH user_purchases AS (
@@ -70,7 +70,7 @@ WHERE us.total_orders > 0
     AND us.total_spent > 0
     AND us.avg_order_value IS NOT NULL
     AND us.days_since_last_purchase IS NOT NULL
-HAVING us.total_spent >= 100
+    AND us.total_spent >= 100
 ORDER BY us.total_spent DESC, us.total_orders DESC;
 
 -- Query 2: Product Performance and Category Analysis
@@ -82,7 +82,6 @@ WITH product_metrics AS (
         p.price,
         p.cost_price AS cost,
         p.stock_quantity,
-        p.reorder_threshold AS reorder_point,
         p.category_id,
         c.category_name,
         c.parent_category_id,
@@ -110,16 +109,16 @@ WITH product_metrics AS (
         AND o.order_date >= date('now', '-90 days')
         AND p.is_active = 1
     GROUP BY p.product_id, p.product_name, p.sku, p.price, p.cost_price, p.stock_quantity,
-             p.reorder_threshold, p.category_id, c.category_name, c.parent_category_id,
+             p.category_id, c.category_name, c.parent_category_id,
              pc.category_name, b.brand_id, b.brand_name
 ),
 product_rankings AS (
     SELECT
         pm.*,
         CASE
-            WHEN pm.stock_quantity <= pm.reorder_point THEN 'Low Stock'
-            WHEN pm.stock_quantity <= pm.reorder_point * 2 THEN 'Medium Stock'
-            WHEN pm.stock_quantity <= pm.reorder_point * 5 THEN 'Healthy Stock'
+            WHEN pm.stock_quantity <= 10 THEN 'Low Stock'
+            WHEN pm.stock_quantity <= 50 THEN 'Medium Stock'
+            WHEN pm.stock_quantity <= 100 THEN 'Healthy Stock'
             ELSE 'Overstocked'
         END AS stock_status,
         CASE
@@ -137,7 +136,6 @@ SELECT
     pr.price,
     pr.cost,
     pr.stock_quantity,
-    pr.reorder_point,
     pr.category_name,
     pr.parent_category_name,
     pr.brand_name,
@@ -158,7 +156,7 @@ WHERE pr.order_count > 0
     AND pr.gross_revenue > 0
     AND pr.gross_profit IS NOT NULL
     AND pr.unique_customers > 0
-HAVING pr.gross_revenue >= 1000
+    AND pr.gross_revenue >= 1000
 ORDER BY pr.gross_revenue DESC, pr.order_count DESC;
 
 -- Query 3: Order Fulfillment and Delivery Performance Analysis
@@ -278,5 +276,5 @@ WHERE fm.order_date IS NOT NULL
     AND fm.total_amount > 0
     AND fm.item_count > 0
     AND fm.user_id IS NOT NULL
-HAVING fm.total_amount >= 10
+    AND fm.total_amount >= 10
 ORDER BY fm.order_date DESC, fm.total_amount DESC;
