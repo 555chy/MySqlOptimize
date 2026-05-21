@@ -24,17 +24,8 @@ public class RemoveRedundantLimitRule implements OptimizationRule {
 
     @Override
     public boolean canApply(Statement statement, OptimizationContext context) {
-        if (!(statement instanceof Select)) {
-            return false;
-        }
-        
-        Select select = (Select) statement;
-        if (!(select.getSelectBody() instanceof PlainSelect)) {
-            return false;
-        }
-        
-        String sql = statement.toString().toUpperCase();
-        return sql.contains("LIMIT");
+        // 禁用此规则，因为表数据行数是动态变化的，无法安全地判断LIMIT是否冗余
+        return false;
     }
 
     @Override
