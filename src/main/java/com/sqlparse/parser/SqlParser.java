@@ -1,10 +1,9 @@
 package com.sqlparse.parser;
 
+import com.github.vertical_blank.sqlformatter.SqlFormatter;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.Statements;
-import net.sf.jsqlparser.util.deparser.StatementDeParser;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,52 +54,6 @@ public class SqlParser {
         return statement.toString();
     }
 
-    public String formatSqlToMultiLines(String sql) {
-        // 先尝试用JSqlParser格式化
-        try {
-            Statement statement = CCJSqlParserUtil.parse(sql);
-            String formatted = statement.toString();
-            // 简单的多行格式化
-            return formatSimpleMultiLine(formatted);
-        } catch (Exception e) {
-            // 解析失败，直接用简单格式化
-            return formatSimpleMultiLine(sql);
-        }
-    }
-    
-    private String formatSimpleMultiLine(String sql) {
-        if (sql == null || sql.trim().isEmpty()) {
-            return sql;
-        }
-        
-        // 简单但有效的多行格式化
-        String result = sql;
-        
-        // 在关键字前添加换行
-        String[] keywords = {
-            "SELECT", "FROM", "WHERE", "AND", "OR", "JOIN", "LEFT", "RIGHT", 
-            "INNER", "OUTER", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET",
-            "UNION", "INSERT", "UPDATE", "DELETE", "SET", "VALUES"
-        };
-        
-        for (String keyword : keywords) {
-            // 替换 " KEYWORD" 为 "\n  KEYWORD"
-            result = result.replaceAll("(?i)\\b" + keyword + "\\b", "\n  " + keyword);
-        }
-        
-        // 开头的换行去掉
-        if (result.startsWith("\n")) {
-            result = result.substring(1);
-        }
-        
-        // 去除多余的换行
-        while (result.contains("\n\n")) {
-            result = result.replace("\n\n", "\n");
-        }
-        
-        return result.trim();
-    }
-
     public String regenerateSql(String sql) throws JSQLParserException {
         return formatSql(sql);
     }
@@ -124,6 +77,17 @@ public class SqlParser {
             return true;
         } catch (JSQLParserException | IllegalArgumentException e) {
             return false;
+        }
+    }
+
+    public String formatSqlToMultiLines(String sql) {
+        if (sql == null || sql.trim().isEmpty()) {
+            return sql;
+        }
+        try {
+            return SqlFormatter.format(sql);
+        } catch (Exception e) {
+            return sql;
         }
     }
 }
