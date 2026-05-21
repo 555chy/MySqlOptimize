@@ -2,9 +2,11 @@ package com.sqlparse.optimizer.rules;
 
 import com.sqlparse.optimizer.OptimizationContext;
 import com.sqlparse.optimizer.OptimizationRule;
+import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.*;
 
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -12,12 +14,12 @@ public class PredicatePushdownRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "PredicatePushdown";
+        return "谓词下推(PredicatePushdown)";
     }
 
     @Override
     public String getDescription() {
-        return "Pushes WHERE conditions down to the deepest possible level in nested queries";
+        return "将WHERE条件下推到嵌套查询的最深层级";
     }
 
     @Override
@@ -25,8 +27,8 @@ public class PredicatePushdownRule implements OptimizationRule {
         if (!(statement instanceof Select)) {
             return false;
         }
-        String sql = statement.toString();
-        return sql.toUpperCase().contains("WHERE") && sql.toUpperCase().contains("SELECT");
+        String sql = statement.toString().toUpperCase();
+        return sql.contains("FROM (SELECT") && sql.contains("WHERE");
     }
 
     @Override
@@ -45,20 +47,37 @@ public class PredicatePushdownRule implements OptimizationRule {
 
     private String pushdownPredicates(String sql) {
         String result = sql;
+        result = pushdownSimplePredicates(result);
+        return result;
+    }
+
+    private String pushdownSimplePredicates(String sql) {
+        String result = sql;
         
-        Pattern nestedPattern = Pattern.compile(
-            "(?i)(FROM\\s+\\w+\\s+WHERE\\s+[^)]+)\\s*\\)\\s*(\\w+)\\s+WHERE\\s+([^)]+)$",
+        Pattern pattern = Pattern.compile(
+            "(?i)(WHERE\\s+[^']+?)\\s+AND\\s+([\\w.]+)\\s*(=|>|<|>=|<=|<>)\\s*([\\w.'()]+)",
             Pattern.CASE_INSENSITIVE
         );
-        Matcher matcher = nestedPattern.matcher(result);
+        Matcher matcher = pattern.matcher(result);
+        StringBuffer sb = new StringBuffer();
+        boolean modified = false;
         
-        if (matcher.find()) {
-            String innerWhere = matcher.group(1);
-            String outerWhere = matcher.group(3);
-            result = result.replace(matcher.group(0), 
-                innerWhere + " AND " + outerWhere + ") " + matcher.group(2));
+        while (matcher.find()) {
+            String whereClause = matcher.group(1);
+            String column = matcher.group(2);
+            String operator = matcher.group(3);
+            String value = matcher.group(4);
+            
+            if (!whereClause.toUpperCase().contains(column)) {
+                modified = true;
+            }
         }
         
-        return result;
+        if (!modified) {
+            return sql;
+        }
+        
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 }

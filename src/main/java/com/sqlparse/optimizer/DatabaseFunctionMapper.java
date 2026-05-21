@@ -11,6 +11,9 @@ public class DatabaseFunctionMapper {
         result = mapNullFunctions(result, dbType);
         result = mapDateFunctions(result, dbType);
         result = mapStringFunctions(result, dbType);
+        result = mapStringConcat(result, dbType);
+        result = mapTopSyntax(result, dbType);
+        result = mapFetchFirstSyntax(result, dbType);
         result = mapLimitSyntax(result, dbType);
         
         return result;
@@ -92,6 +95,60 @@ public class DatabaseFunctionMapper {
         return result;
     }
 
+    private static String mapStringConcat(String sql, DatabaseType dbType) {
+        String result = sql;
+        
+        switch (dbType) {
+            case ORACLE:
+                result = concatToConcat(result);
+                break;
+            case POSTGRESQL:
+                break;
+            case MYSQL:
+            case SQLITE:
+                result = doublePipeToConcat(result);
+                break;
+        }
+        
+        return result;
+    }
+    
+    private static String mapTopSyntax(String sql, DatabaseType dbType) {
+        String result = sql;
+        
+        switch (dbType) {
+            case ORACLE:
+                result = topToOracleRownum(result);
+                break;
+            case POSTGRESQL:
+                result = topToLimit(result);
+                break;
+            case MYSQL:
+            case SQLITE:
+                result = topToLimit(result);
+                break;
+        }
+        
+        return result;
+    }
+    
+    private static String mapFetchFirstSyntax(String sql, DatabaseType dbType) {
+        String result = sql;
+        
+        switch (dbType) {
+            case ORACLE:
+                break;
+            case POSTGRESQL:
+                break;
+            case MYSQL:
+            case SQLITE:
+                result = fetchFirstToLimit(result);
+                break;
+        }
+        
+        return result;
+    }
+    
     private static String mapLimitSyntax(String sql, DatabaseType dbType) {
         if (dbType == DatabaseType.ORACLE) {
             return convertLimitToOracleRownum(sql);
@@ -270,19 +327,6 @@ public class DatabaseFunctionMapper {
         return sb.toString();
     }
 
-    private static String convertLimitToOracleRownum(String sql) {
-        Pattern pattern = Pattern.compile("(?i)(SELECT\\s+.+?)(\\s+FROM\\s+.+?)(\\s+LIMIT\\s+(\\d+))(\\s*.*)");
-        Matcher matcher = pattern.matcher(sql);
-        if (matcher.find()) {
-            String selectPart = matcher.group(1);
-            String fromPart = matcher.group(2);
-            String limitNum = matcher.group(4);
-            String rest = matcher.group(5);
-            return "SELECT * FROM (SELECT " + selectPart.substring(7) + ", ROWNUM as rn" + fromPart + rest + ") WHERE rn <= " + limitNum;
-        }
-        return sql;
-    }
-
     private static String getOracleIntervalUnit(String unit) {
         switch (unit) {
             case "DAY": return "DAY";
@@ -305,5 +349,92 @@ public class DatabaseFunctionMapper {
             case "second": return "seconds";
             default: return "days";
         }
+    }
+    
+    private static String doublePipeToConcat(String sql) {
+        String result = sql;
+        Pattern pattern = Pattern.compile("(?i)([^\\s]+)\\s*\\|\\|\\s*([^\\s]+)");
+        Matcher matcher = pattern.matcher(result);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(sb, "CONCAT(" + matcher.group(1) + ", " + matcher.group(2) + ")");
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+    
+    private static String topToOracleRownum(String sql) {
+        String result = sql;
+        Pattern pattern = Pattern.compile("(?i)(SELECT)\\s+TOP\\s+(\\d+)\\s+(.+?)(\\s+FROM\\s+.+)", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(result);
+        if (matcher.find()) {
+            String selectPart = matcher.group(1);
+            String topNum = matcher.group(2);
+            String columns = matcher.group(3);
+            String fromRest = matcher.group(4);
+            result = "SELECT * FROM (SELECT " + selectPart.substring(7) + " " + columns + fromRest + ") WHERE ROWNUM <= " + topNum;
+        }
+        return result;
+    }
+    
+    private static String topToLimit(String sql) {
+        String result = sql;
+        Pattern pattern = Pattern.compile("(?i)(SELECT)\\s+TOP\\s+(\\d+)\\s+(.+)", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(result);
+        if (matcher.find()) {
+            String selectPart = matcher.group(1);
+            String topNum = matcher.group(2);
+            String rest = matcher.group(3);
+            result = "SELECT " + selectPart.substring(7) + " " + rest + " LIMIT " + topNum;
+        }
+        return result;
+    }
+    
+    private static String fetchFirstToLimit(String sql) {
+        String result = sql;
+        Pattern pattern = Pattern.compile("(?i)(SELECT\\s+.+?)\\s+FETCH\\s+FIRST\\s+(\\d+)\\s+(ROW|ROWS)\\s+ONLY", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(result);
+        if (matcher.find()) {
+            String selectPart = matcher.group(1);
+            String limitNum = matcher.group(2);
+            result = selectPart + " LIMIT " + limitNum;
+        }
+        return result;
+    }
+    
+    private static String convertLimitToOracleRownum(String sql) {
+        String result = sql;
+        
+        Pattern limitOffsetPattern = Pattern.compile("(?i)(SELECT\\s+)(.+?)(\\s+FROM\\s+.+?)(\\s+LIMIT\\s+(\\d+)\\s+OFFSET\\s+(\\d+))(\\s*.*)", Pattern.DOTALL);
+        Matcher limitOffsetMatcher = limitOffsetPattern.matcher(result);
+        if (limitOffsetMatcher.find()) {
+            String selectPart = limitOffsetMatcher.group(1);
+            String columns = limitOffsetMatcher.group(2);
+            String fromPart = limitOffsetMatcher.group(3);
+            String limitNum = limitOffsetMatcher.group(5);
+            String offsetNum = limitOffsetMatcher.group(6);
+            String rest = limitOffsetMatcher.group(7);
+            int lowerBound = Integer.parseInt(offsetNum) + 1;
+            int upperBound = Integer.parseInt(offsetNum) + Integer.parseInt(limitNum);
+            result = "SELECT * FROM (" +
+                    "SELECT a.*, ROWNUM rn FROM (" +
+                    "SELECT " + columns + fromPart + rest +
+                    ") a WHERE ROWNUM <= " + upperBound +
+                    ") WHERE rn >= " + lowerBound;
+            return result;
+        }
+        
+        Pattern limitPattern = Pattern.compile("(?i)(SELECT\\s+)(.+?)(\\s+FROM\\s+.+?)(\\s+LIMIT\\s+(\\d+))(\\s*.*)", Pattern.DOTALL);
+        Matcher limitMatcher = limitPattern.matcher(result);
+        if (limitMatcher.find()) {
+            String selectPart = limitMatcher.group(1);
+            String columns = limitMatcher.group(2);
+            String fromPart = limitMatcher.group(3);
+            String limitNum = limitMatcher.group(5);
+            String rest = limitMatcher.group(6);
+            result = "SELECT * FROM (SELECT " + columns + fromPart + rest + ") WHERE ROWNUM <= " + limitNum;
+        }
+        
+        return result;
     }
 }

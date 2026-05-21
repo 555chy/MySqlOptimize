@@ -1,27 +1,23 @@
 package com.sqlparse.optimizer.rules;
 
+import com.sqlparse.metadata.DatabaseMetadata;
 import com.sqlparse.optimizer.OptimizationContext;
 import com.sqlparse.optimizer.OptimizationRule;
 import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.select.Select;
-import net.sf.jsqlparser.statement.select.PlainSelect;
-import net.sf.jsqlparser.statement.select.SelectItem;
-import net.sf.jsqlparser.statement.select.AllColumns;
-import net.sf.jsqlparser.statement.select.AllTableColumns;
+import net.sf.jsqlparser.statement.select.*;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class ColumnPruningRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "ColumnPruning";
+        return "列剪裁(ColumnPruning)";
     }
 
     @Override
     public String getDescription() {
-        return "Removes unneeded columns from SELECT * when table schema is known";
+        return "当表结构已知时从SELECT *中移除不需要的列";
     }
 
     @Override
@@ -40,14 +36,21 @@ public class ColumnPruningRule implements OptimizationRule {
         
         for (SelectItem item : selectItems) {
             if (item instanceof AllColumns) {
-                return true;
+                DatabaseMetadata metadata = context.getDatabaseMetadata();
+                return metadata != null;
             }
         }
+        
         return false;
     }
 
     @Override
     public Statement apply(Statement statement, OptimizationContext context) {
+        DatabaseMetadata metadata = context.getDatabaseMetadata();
+        if (metadata == null) {
+            return statement;
+        }
+        
         return statement;
     }
 }

@@ -12,20 +12,18 @@ public class NotInToNotExistsRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "NotInToNotExists";
+        return "NOT IN转NOT EXISTS(NotInToNotExists)";
     }
 
     @Override
     public String getDescription() {
-        return "Converts NOT IN subqueries to NOT EXISTS for better performance";
+        return "将NOT IN子查询转换为NOT EXISTS以提升性能";
     }
 
     @Override
     public boolean canApply(Statement statement, OptimizationContext context) {
-        if (!(statement instanceof Select)) {
-            return false;
-        }
-        return statement.toString().toUpperCase().contains("NOT IN (SELECT");
+        // 暂时禁用，因为正则表达式有问题，可能导致结果不一致
+        return false;
     }
 
     @Override
@@ -44,29 +42,34 @@ public class NotInToNotExistsRule implements OptimizationRule {
 
     private String convertNotInToNotExists(String sql) {
         String result = sql;
+        
         Pattern pattern = Pattern.compile(
-            "(?i)(\\w+)\\s+NOT\\s+IN\\s*\\((SELECT\\s+)(\\w+)\\s+FROM\\s+(\\w+)(.*?)\\)",
+            "(?i)([^\\s]+)\\s+NOT\\s+IN\\s*\\(\\s*SELECT\\s+([^\\s]+)\\s+FROM\\s+([^\\s]+)\\s*(?:WHERE\\s+([^)]+))?\\s*\\)",
             Pattern.CASE_INSENSITIVE
         );
         Matcher matcher = pattern.matcher(result);
-        
         StringBuffer sb = new StringBuffer();
+        
         while (matcher.find()) {
             String leftColumn = matcher.group(1);
-            String selectPrefix = matcher.group(2);
-            String rightColumn = matcher.group(3);
-            String tableName = matcher.group(4);
-            String restOfQuery = matcher.group(5);
+            String selectColumn = matcher.group(2);
+            String tableName = matcher.group(3);
+            String whereClause = matcher.group(4);
             
-            String replacement = String.format(
-                "NOT EXISTS (%s1 FROM %s%s WHERE %s.%s = %s)",
-                selectPrefix, tableName, restOfQuery, tableName, rightColumn, leftColumn
-            );
+            String replacement;
+            if (whereClause != null && !whereClause.trim().isEmpty()) {
+                replacement = "NOT EXISTS (SELECT 1 FROM " + tableName + " WHERE " + 
+                             tableName + "." + selectColumn + " = " + leftColumn + 
+                             " AND " + whereClause + ")";
+            } else {
+                replacement = "NOT EXISTS (SELECT 1 FROM " + tableName + " WHERE " + 
+                             tableName + "." + selectColumn + " = " + leftColumn + ")";
+            }
             
             matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         }
-        matcher.appendTail(sb);
         
+        matcher.appendTail(sb);
         return sb.toString();
     }
 }

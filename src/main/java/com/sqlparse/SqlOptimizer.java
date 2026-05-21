@@ -52,8 +52,9 @@ public class SqlOptimizer {
             new MergeNestedSubqueryRule(),
             new UseExistsInsteadOfInRule(),
             new OptimizeJoinOrderRule(),
-            new PredicatePushdownRule(),
             new RemoveAlwaysTrueOrFalseRule(),
+            new SubqueryOrderByRemovalRule(),
+            new PredicatePushdownRule(),
             new ConstantFoldingRule(),
             new MergeUnionRule(),
             new RemoveRedundantJoinsRule(),
@@ -64,7 +65,12 @@ public class SqlOptimizer {
             new NotInToNotExistsRule(),
             new NullCheckEliminationRule(),
             new ArithmeticComparisonOptimizeRule(),
-            new LikePatternOptimizeRule()
+            new LikePatternOptimizeRule(),
+            new CountStarFromSubqueryRule(),
+            new OracleSpecificOptimizationRule(),
+            new MySqlSpecificOptimizationRule(),
+            new PostgreSqlSpecificOptimizationRule(),
+            new SqliteSpecificOptimizationRule()
         ));
     }
 

@@ -12,12 +12,12 @@ public class MergeUnionRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "MergeUnion";
+        return "合并UNION(MergeUnion)";
     }
 
     @Override
     public String getDescription() {
-        return "Merges consecutive UNION operations with the same structure";
+        return "合并具有相同结构的连续UNION操作";
     }
 
     @Override

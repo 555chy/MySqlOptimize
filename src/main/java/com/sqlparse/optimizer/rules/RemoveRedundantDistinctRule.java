@@ -13,12 +13,12 @@ public class RemoveRedundantDistinctRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "RemoveRedundantDistinct";
+        return "移除冗余DISTINCT(RemoveRedundantDistinct)";
     }
 
     @Override
     public String getDescription() {
-        return "Removes redundant DISTINCT when the result is already unique";
+        return "移除结果已经唯一时的冗余DISTINCT";
     }
 
     @Override

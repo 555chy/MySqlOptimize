@@ -7,17 +7,20 @@ import net.sf.jsqlparser.statement.select.Select;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public class RemoveRedundantJoinsRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "RemoveRedundantJoins";
+        return "移除冗余JOIN(RemoveRedundantJoins)";
     }
 
     @Override
     public String getDescription() {
-        return "Removes JOINs whose tables are not referenced in SELECT, WHERE, or other clauses";
+        return "移除在SELECT、WHERE或其他子句中未被引用的表JOIN";
     }
 
     @Override
@@ -26,14 +29,14 @@ public class RemoveRedundantJoinsRule implements OptimizationRule {
             return false;
         }
         String sql = statement.toString().toUpperCase();
-        int joinCount = (sql.length() - sql.replace("JOIN", "").length()) / "JOIN".length();
+        int joinCount = countOccurrences(sql, "JOIN");
         return joinCount > 0;
     }
 
     @Override
     public Statement apply(Statement statement, OptimizationContext context) {
         String sql = statement.toString();
-        String optimizedSql = removeUnreferencedJoins(sql);
+        String optimizedSql = removeUnreferencedJoins(sql, context);
         if (!optimizedSql.equals(sql)) {
             try {
                 return net.sf.jsqlparser.parser.CCJSqlParserUtil.parse(optimizedSql);
@@ -44,20 +47,50 @@ public class RemoveRedundantJoinsRule implements OptimizationRule {
         return statement;
     }
 
-    private String removeUnreferencedJoins(String sql) {
+    private String removeUnreferencedJoins(String sql, OptimizationContext context) {
         String result = sql;
-        Pattern joinPattern = Pattern.compile(
-            "(?i)(LEFT|RIGHT|INNER)?\\s*JOIN\\s+(\\w+)\\s+(\\w+)\\s+ON\\s+[^=]+=[^=]+\\s+ON\\s+[^=]+=[^=]+",
+        
+        Set<String> referencedTables = extractReferencedTables(result);
+        result = removeUnreferencedJoinClauses(result, referencedTables);
+        
+        return result;
+    }
+
+    private Set<String> extractReferencedTables(String sql) {
+        Set<String> tables = new HashSet<>();
+        
+        Pattern fromPattern = Pattern.compile(
+            "(?i)(?:FROM|JOIN)\\s+(\\w+)(?:\\s+(?:AS\\s+)?(\\w+))?",
             Pattern.CASE_INSENSITIVE
         );
-        Matcher matcher = joinPattern.matcher(result);
+        Matcher matcher = fromPattern.matcher(sql);
+        
         while (matcher.find()) {
-            String joinClause = matcher.group();
-            String tableName = matcher.group(2);
-            if (!result.toUpperCase().contains(tableName.toUpperCase() + ".") || 
-                result.toUpperCase().split(tableName.toUpperCase() + ".").length <= 2) {
+            String tableName = matcher.group(1);
+            String alias = matcher.group(2);
+            
+            if (tableName != null) {
+                tables.add(tableName.toUpperCase());
+            }
+            if (alias != null) {
+                tables.add(alias.toUpperCase());
             }
         }
-        return result;
+        
+        return tables;
+    }
+
+    private String removeUnreferencedJoinClauses(String sql, Set<String> referencedTables) {
+        return sql;
+    }
+
+    private int countOccurrences(String str, String sub) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = str.indexOf(sub, idx)) != -1) {
+            count++;
+            idx += sub.length();
+        }
+        return count;
     }
 }

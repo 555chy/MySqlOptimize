@@ -16,12 +16,12 @@ public class SimplifyCountStarRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "SimplifyCountStar";
+        return "简化COUNT表达式(SimplifyCountStar)";
     }
 
     @Override
     public String getDescription() {
-        return "Simplifies COUNT expressions to COUNT(*) for better performance";
+        return "简化COUNT表达式为COUNT(*)以提升性能";
     }
 
     @Override

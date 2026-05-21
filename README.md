@@ -98,13 +98,13 @@ java -jar target/mySqlparse-1.0-SNAPSHOT.jar --init-db -db jdbc:sqlite:test.db -
 java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test
 
 # 使用 test_queries_3.sql（3条SQL测试）
-java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_queries_3.sql
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_sqlite_queries_10.sql
 
 # 使用 test_queries_100.sql
-java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_queries_100.sql
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_sqlite_queries_10.sql
 
 # 同时指定数据库和测试文件
-java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_queries_3.sql -db jdbc:sqlite:test.db
+java -jar target/mySqlparse-1.0-SNAPSHOT.jar --test test_sqlite_queries_10.sql -db jdbc:sqlite:test.db --validate --verbose
 
 # ========================================
 # 3. 优化SQL语句

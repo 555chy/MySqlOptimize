@@ -12,12 +12,12 @@ public class SubqueryToJoinRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "SubqueryToJoin";
+        return "子查询转JOIN(SubqueryToJoin)";
     }
 
     @Override
     public String getDescription() {
-        return "Converts eligible subqueries to JOINs for better performance";
+        return "将符合条件的子查询转换为JOIN以提升性能";
     }
 
     @Override
@@ -45,17 +45,33 @@ public class SubqueryToJoinRule implements OptimizationRule {
 
     private String convertSubqueryToJoin(String sql) {
         String result = sql;
+        
         Pattern pattern = Pattern.compile(
-            "(?i)(SELECT\\s+[^*]+\\s+FROM\\s+\\w+\\s+WHERE\\s+EXISTS\\s*\\()\\s*SELECT\\s+1\\s+FROM\\s+(\\w+)\\s+WHERE\\s+(\\w+)\\.(\\w+)\\s*=\\s*(\\w+)\\.(\\w+)",
-            Pattern.CASE_INSENSITIVE
+            "(?i)(SELECT\\s+[^\\*]+?\\s+FROM\\s+\\w+)\\s+WHERE\\s+EXISTS\\s*\\(\\s*SELECT\\s+\\d+\\s+FROM\\s+(\\w+)\\s+WHERE\\s+(\\w+)\\.(\\w+)\\s*=\\s*(\\w+)\\.(\\w+)(?:\\s+AND\\s+([^)]+))?\\s*\\)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL
         );
         Matcher matcher = pattern.matcher(result);
+        
         if (matcher.find()) {
-            result = result.replace(matcher.group(0), 
-                "SELECT " + matcher.group(1).replaceFirst("(?i)WHERE EXISTS\\s*\\(", "") + 
-                " INNER JOIN " + matcher.group(2) + 
-                " ON " + matcher.group(3) + "." + matcher.group(4) + " = " + matcher.group(5) + "." + matcher.group(6));
+            String selectPart = matcher.group(1);
+            String subqueryTable = matcher.group(2);
+            String leftTable = matcher.group(3);
+            String leftColumn = matcher.group(4);
+            String rightTable = matcher.group(5);
+            String rightColumn = matcher.group(6);
+            String extraCondition = matcher.group(7);
+            
+            String replacement = selectPart + " INNER JOIN " + subqueryTable + 
+                                 " ON " + leftTable + "." + leftColumn + " = " + 
+                                 rightTable + "." + rightColumn;
+            
+            if (extraCondition != null && !extraCondition.trim().isEmpty()) {
+                replacement += " AND " + extraCondition;
+            }
+            
+            result = matcher.replaceFirst(Matcher.quoteReplacement(replacement));
         }
+        
         return result;
     }
 }

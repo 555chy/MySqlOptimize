@@ -16,12 +16,12 @@ public class RemoveUnnecessaryOrderByRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "RemoveUnnecessaryOrderBy";
+        return "移除不必要ORDER BY(RemoveUnnecessaryOrderBy)";
     }
 
     @Override
     public String getDescription() {
-        return "Removes unnecessary ORDER BY clauses from SELECT COUNT(*) queries";
+        return "从SELECT COUNT(*)查询中移除不必要的ORDER BY子句";
     }
 
     @Override

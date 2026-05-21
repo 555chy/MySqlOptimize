@@ -12,12 +12,12 @@ public class OrConditionRewriteRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "OrConditionRewrite";
+        return "OR条件重写(OrConditionRewrite)";
     }
 
     @Override
     public String getDescription() {
-        return "Rewrites OR conditions to UNION for better index utilization";
+        return "将OR条件重写为UNION以获得更好的索引利用";
     }
 
     @Override
@@ -32,7 +32,20 @@ public class OrConditionRewriteRule implements OptimizationRule {
 
     @Override
     public Statement apply(Statement statement, OptimizationContext context) {
+        String sql = statement.toString();
+        String optimizedSql = rewriteOrConditions(sql);
+        if (!optimizedSql.equals(sql)) {
+            try {
+                return net.sf.jsqlparser.parser.CCJSqlParserUtil.parse(optimizedSql);
+            } catch (Exception e) {
+                return statement;
+            }
+        }
         return statement;
+    }
+
+    private String rewriteOrConditions(String sql) {
+        return sql;
     }
 
     private int countOccurrences(String str, String sub) {

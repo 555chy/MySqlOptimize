@@ -12,12 +12,12 @@ public class LikePatternOptimizeRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "LikePatternOptimize";
+        return "LIKE模式优化(LikePatternOptimize)";
     }
 
     @Override
     public String getDescription() {
-        return "Optimizes LIKE patterns for better index usage";
+        return "优化LIKE模式以获得更好的索引使用";
     }
 
     @Override
@@ -45,14 +45,28 @@ public class LikePatternOptimizeRule implements OptimizationRule {
 
     private String optimizeLikePatterns(String sql) {
         String result = sql;
-        Pattern pattern = Pattern.compile("(?i)LIKE\\s+'([^']+)%'");
-        Matcher matcher = pattern.matcher(result);
+
+        Pattern exactMatchPattern = Pattern.compile(
+            "(?i)(LIKE)\\s+'([^%_]+)'",
+            Pattern.CASE_INSENSITIVE
+        );
+        Matcher matcher = exactMatchPattern.matcher(result);
         StringBuffer sb = new StringBuffer();
+
         while (matcher.find()) {
-            String content = matcher.group(1);
-            matcher.appendReplacement(sb, "LIKE '" + content + "%'");
+            String likeKeyword = matcher.group(1);
+            String value = matcher.group(2);
+
+            if (value != null && !value.contains("%") && !value.contains("_")) {
+                String replacement = "= '" + value + "'";
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+            } else {
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(matcher.group()));
+            }
         }
         matcher.appendTail(sb);
-        return sb.toString();
+        result = sb.toString();
+
+        return result;
     }
 }

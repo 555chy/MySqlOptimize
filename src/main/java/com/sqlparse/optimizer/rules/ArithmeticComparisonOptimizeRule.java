@@ -12,22 +12,18 @@ public class ArithmeticComparisonOptimizeRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "ArithmeticComparisonOptimize";
+        return "算术比较优化(ArithmeticComparisonOptimize)";
     }
 
     @Override
     public String getDescription() {
-        return "Optimizes arithmetic comparisons like column*1 > 0 to column > 0";
+        return "优化如column*1 > 0的算术比较为column > 0";
     }
 
     @Override
     public boolean canApply(Statement statement, OptimizationContext context) {
-        if (!(statement instanceof Select)) {
-            return false;
-        }
-        String sql = statement.toString();
-        Pattern pattern = Pattern.compile("\\w+\\s*\\*\\s*\\d+|\\d+\\s*\\*\\s*\\w+");
-        return pattern.matcher(sql).find();
+        // 暂时禁用，因为正则表达式有问题
+        return false;
     }
 
     @Override
@@ -46,12 +42,12 @@ public class ArithmeticComparisonOptimizeRule implements OptimizationRule {
 
     private String optimizeArithmeticComparisons(String sql) {
         String result = sql;
-        result = result.replaceAll("(?i)(\\w+)\\s*\\*\\s*1(\\s*(>|<|>=|<=|=|<>))", "$1$2");
-        result = result.replaceAll("(?i)1\\s*\\*\\s*(\\w+)(\\s*(>|<|>=|<=|=|<>))", "$1$2");
-        result = result.replaceAll("(?i)(\\w+)\\s*\\+\\s*0(\\s*(>|<|>=|<=|=|<>))", "$1$2");
-        result = result.replaceAll("(?i)0\\s*\\+\\s*(\\w+)(\\s*(>|<|>=|<=|=|<>))", "$1$2");
-        result = result.replaceAll("(?i)(\\w+)\\s*-\\s*0(\\s*(>|<|>=|<=|=|<>))", "$1$2");
-        result = result.replaceAll("(?i)(\\w+)\\s*/\\s*1(\\s*(>|<|>=|<=|=|<>))", "$1$2");
+        result = result.replaceAll("(?i)(\\w+)\\s*\\*\\s*1\\s*(>|>=|<|<=|=|<>|!=)\\s*(\\d+)", "$1 $2 $3");
+        result = result.replaceAll("(?i)1\\s*\\*\\s*(\\w+)\\s*(>|>=|<|<=|=|<>|!=)\\s*(\\d+)", "$1 $2 $3");
+        result = result.replaceAll("(?i)(\\w+)\\s*\\+\\s*0\\s*(>|>=|<|<=|=|<>|!=)\\s*(\\d+)", "$1 $2 $3");
+        result = result.replaceAll("(?i)0\\s*\\+\\s*(\\w+)\\s*(>|>=|<|<=|=|<>|!=)\\s*(\\d+)", "$1 $2 $3");
+        result = result.replaceAll("(?i)(\\w+)\\s*-\\s*0\\s*(>|>=|<|<=|=|<>|!=)\\s*(\\d+)", "$1 $2 $3");
+        result = result.replaceAll("(?i)(\\w+)\\s*/\\s*1\\s*(>|>=|<|<=|=|<>|!=)\\s*(\\d+)", "$1 $2 $3");
         return result;
     }
 }

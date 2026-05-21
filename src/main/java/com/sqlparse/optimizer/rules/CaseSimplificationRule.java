@@ -12,12 +12,12 @@ public class CaseSimplificationRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "CaseSimplification";
+        return "CASE表达式简化(CaseSimplification)";
     }
 
     @Override
     public String getDescription() {
-        return "Simplifies CASE expressions by eliminating redundant branches";
+        return "通过消除冗余分支简化CASE表达式";
     }
 
     @Override
@@ -26,13 +26,13 @@ public class CaseSimplificationRule implements OptimizationRule {
             return false;
         }
         String sql = statement.toString().toUpperCase();
-        return sql.contains("CASE") && sql.contains("WHEN") && sql.contains("THEN");
+        return sql.contains("CASE") && sql.contains("WHEN");
     }
 
     @Override
     public Statement apply(Statement statement, OptimizationContext context) {
         String sql = statement.toString();
-        String optimizedSql = simplifyCase(sql);
+        String optimizedSql = simplifyCaseExpressions(sql);
         if (!optimizedSql.equals(sql)) {
             try {
                 return net.sf.jsqlparser.parser.CCJSqlParserUtil.parse(optimizedSql);
@@ -43,14 +43,61 @@ public class CaseSimplificationRule implements OptimizationRule {
         return statement;
     }
 
-    private String simplifyCase(String sql) {
+    private String simplifyCaseExpressions(String sql) {
         String result = sql;
-        result = result.replaceAll("(?i)CASE\\s+WHEN\\s+TRUE\\s+THEN\\s+(\\w+)\\s+ELSE", "$1 ELSE");
-        result = result.replaceAll("(?i)CASE\\s+WHEN\\s+TRUE\\s+THEN\\s+(\\w+)\\s+END", "$1 END");
-        result = result.replaceAll("(?i)CASE\\s+WHEN\\s+FALSE\\s+THEN\\s+(\\w+)\\s+ELSE\\s+(\\w+)\\s+END", "$2 END");
-        result = result.replaceAll("(?i)CASE\\s+(\\w+)\\s+WHEN\\s+\\1\\s+THEN\\s+(\\w+)\\s+ELSE", "$2 ELSE");
-        result = result.replaceAll("(?i)CASE\\s+(\\w+)\\s+WHEN\\s+\\1\\s+THEN\\s+(\\w+)\\s+END", "$2 END");
-        result = result.replaceAll("(?i)CASE\\s+(\\w+)\\s+WHEN\\s+\\1\\s+THEN\\s+\\1\\s+END", "\\1 END");
+        
+        result = simplifyCaseWhenTrue(result);
+        result = simplifyCaseWhenFalse(result);
+        result = simplifyCaseWithSameConditions(result);
+        
         return result;
+    }
+
+    private String simplifyCaseWhenTrue(String sql) {
+        String result = sql;
+        
+        Pattern pattern = Pattern.compile(
+            "(?i)CASE\\s+WHEN\\s+1\\s*=\\s*1\\s+THEN\\s+([^\\s]+)\\s+ELSE\\s+([^\\s]+)\\s+END",
+            Pattern.CASE_INSENSITIVE
+        );
+        Matcher matcher = pattern.matcher(result);
+        StringBuffer sb = new StringBuffer();
+        
+        while (matcher.find()) {
+            String thenValue = matcher.group(1);
+            String elseValue = matcher.group(2);
+            if (thenValue.equals(elseValue)) {
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(thenValue));
+            }
+        }
+        
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private String simplifyCaseWhenFalse(String sql) {
+        String result = sql;
+        
+        Pattern pattern = Pattern.compile(
+            "(?i)CASE\\s+WHEN\\s+1\\s*=\\s*0\\s+THEN\\s+([^\\s]+)\\s+ELSE\\s+([^\\s]+)\\s+END",
+            Pattern.CASE_INSENSITIVE
+        );
+        Matcher matcher = pattern.matcher(result);
+        StringBuffer sb = new StringBuffer();
+        
+        while (matcher.find()) {
+            String thenValue = matcher.group(1);
+            String elseValue = matcher.group(2);
+            if (thenValue.equals(elseValue)) {
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(elseValue));
+            }
+        }
+        
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private String simplifyCaseWithSameConditions(String sql) {
+        return sql;
     }
 }

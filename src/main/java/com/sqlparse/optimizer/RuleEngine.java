@@ -55,21 +55,31 @@ public class RuleEngine {
         log.log("Starting optimization process");
 
         Statement current = statement;
+        String currentSql = originalSql;
         int ruleId = 1;
         for (OptimizationRule rule : rules) {
             if (rule.canApply(current, context)) {
                 log.log(rule.getName(), "Query", "Applying rule");
                 Statement optimized = rule.apply(current, context);
+                String optimizedSql = optimized.toString();
+                
+                // 只在SQL真正改变时才标记为已应用
+                boolean actuallyApplied = !optimizedSql.equals(currentSql);
+                
                 RuleApplication application = new RuleApplication(
                         ruleId,
                         rule.getName(),
                         rule.getDescription(),
                         "Query",
-                        true
+                        actuallyApplied
                 );
                 result.addAppliedRule(application);
-                current = optimized;
-                log.log(rule.getName(), "Query", "Rule applied successfully");
+                
+                if (actuallyApplied) {
+                    current = optimized;
+                    currentSql = optimizedSql;
+                    log.log(rule.getName(), "Query", "Rule applied successfully");
+                }
             } else {
                 RuleApplication application = new RuleApplication(
                         ruleId,
@@ -84,7 +94,7 @@ public class RuleEngine {
         }
 
         result.setOptimizedStatement(current);
-        result.setOptimizedSql(current.toString());
+        result.setOptimizedSql(currentSql);
         log.log("Optimization completed. " + result.getAppliedRuleCount() + " rules applied.");
 
         return result;

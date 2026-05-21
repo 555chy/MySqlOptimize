@@ -12,12 +12,12 @@ public class ConstantFoldingRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "ConstantFolding";
+        return "常量折叠(ConstantFolding)";
     }
 
     @Override
     public String getDescription() {
-        return "Evaluates constant expressions at parse time instead of runtime";
+        return "在解析时计算常量表达式而非运行时";
     }
 
     @Override

@@ -12,12 +12,12 @@ public class SimplifyWithClauseRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "SimplifyWithClause";
+        return "简化WITH子句(SimplifyWithClause)";
     }
 
     @Override
     public String getDescription() {
-        return "Inlines simple CTEs (WITH clauses) that are used only once";
+        return "内联只使用一次的简单CTE（WITH子句）";
     }
 
     @Override
@@ -25,13 +25,14 @@ public class SimplifyWithClauseRule implements OptimizationRule {
         if (!(statement instanceof Select)) {
             return false;
         }
-        return statement.toString().toUpperCase().contains("WITH ");
+        String sql = statement.toString().toUpperCase();
+        return sql.contains("WITH") && sql.contains("AS (");
     }
 
     @Override
     public Statement apply(Statement statement, OptimizationContext context) {
         String sql = statement.toString();
-        String optimizedSql = simplifyWithClause(sql);
+        String optimizedSql = inlineSimpleCTEs(sql);
         if (!optimizedSql.equals(sql)) {
             try {
                 return net.sf.jsqlparser.parser.CCJSqlParserUtil.parse(optimizedSql);
@@ -42,43 +43,44 @@ public class SimplifyWithClauseRule implements OptimizationRule {
         return statement;
     }
 
-    private String simplifyWithClause(String sql) {
-        String upperSql = sql.toUpperCase();
-        if (!upperSql.startsWith("WITH ")) {
-            return sql;
-        }
-
-        int withEndIndex = findWithEndIndex(sql);
-        if (withEndIndex == -1) {
-            return sql;
-        }
-
-        String withPart = sql.substring(0, withEndIndex);
-        String mainPart = sql.substring(withEndIndex);
-
-        Pattern ctePattern = Pattern.compile("(?i)(\\w+)\\s+AS\\s*\\(([^)]+)\\)");
-        Matcher matcher = ctePattern.matcher(withPart);
-
-        String result = mainPart;
-        while (matcher.find()) {
+    private String inlineSimpleCTEs(String sql) {
+        String result = sql;
+        
+        Pattern ctePattern = Pattern.compile(
+            "(?i)WITH\\s+(\\w+)\\s+AS\\s*\\(\\s*(SELECT\\s+.+?)\\s*\\)\\s*(SELECT\\s+[^;]+)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL
+        );
+        Matcher matcher = ctePattern.matcher(result);
+        
+        if (matcher.find()) {
             String cteName = matcher.group(1);
-            String cteBody = matcher.group(2);
-            result = result.replaceAll("(?i)" + Pattern.quote(cteName), "(" + cteBody + ")");
-        }
-
-        return result.trim();
-    }
-
-    private int findWithEndIndex(String sql) {
-        int depth = 0;
-        for (int i = 0; i < sql.length(); i++) {
-            char c = sql.charAt(i);
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
-            else if (depth == 0 && i > 4 && sql.substring(0, i).toUpperCase().contains("SELECT ")) {
-                return i;
+            String cteSelect = matcher.group(2);
+            String mainQuery = matcher.group(3);
+            
+            if (!cteSelect.toUpperCase().contains("UNION") && 
+                !cteSelect.toUpperCase().contains("JOIN") &&
+                cteSelect.toUpperCase().contains("FROM")) {
+                String tableRef = "( " + cteSelect + " )";
+                if (mainQuery.toUpperCase().contains(cteName.toUpperCase())) {
+                    String occurrenceCount = countOccurrences(mainQuery.toUpperCase(), cteName.toUpperCase());
+                    if ("1".equals(occurrenceCount)) {
+                        result = cteSelect.replaceFirst("(?i)SELECT\\s+", "SELECT ") + 
+                                mainQuery.replaceFirst("(?i)" + Pattern.quote(cteName), "(" + cteSelect + ")");
+                    }
+                }
             }
         }
-        return -1;
+        
+        return result;
+    }
+
+    private String countOccurrences(String str, String sub) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = str.indexOf(sub, idx)) != -1) {
+            count++;
+            idx += sub.length();
+        }
+        return String.valueOf(count);
     }
 }

@@ -6,6 +6,7 @@ import com.sqlparse.metadata.MetadataFetcher;
 import com.sqlparse.optimizer.DatabaseType;
 import com.sqlparse.optimizer.OptimizationResult;
 import com.sqlparse.optimizer.RuleApplication;
+import com.sqlparse.parser.SqlParser;
 import com.sqlparse.testdata.EcommerceSchemaGenerator;
 import com.sqlparse.testdata.TestDataGenerator;
 import com.sqlparse.validator.QueryResult;
@@ -201,10 +202,16 @@ public class Main {
             int successCount = 0;
             int failCount = 0;
             int optimizedCount = 0;
+            int noOptimizationCount = 0;
             int queryExecutionFailCount = 0;
             int consistentCount = 0;
             long totalOriginalTime = 0;
             long totalOptimizedTime = 0;
+            
+            List<Integer> failedQueryIndices = new ArrayList<>();
+            List<Integer> executionFailedQueryIndices = new ArrayList<>();
+            List<Integer> inconsistentQueryIndices = new ArrayList<>();
+            List<Integer> noOptimizationQueryIndices = new ArrayList<>();
             
             for (int i = 0; i < sqlList.size(); i++) {
                 String sql = sqlList.get(i);
@@ -229,10 +236,11 @@ public class Main {
                     }
                     
                     if (verbose) {
+                        SqlParser sqlParser = new SqlParser();
                         System.out.println("\n--- 原始SQL ---");
-                        System.out.println(sql);
+                        System.out.println(sqlParser.formatSqlToMultiLines(sql));
                         System.out.println("\n--- 优化后SQL ---");
-                        System.out.println(optimizedSql);
+                        System.out.println(sqlParser.formatSqlToMultiLines(optimizedSql));
                     }
                     
                     if (!sql.equals(optimizedSql)) {
@@ -278,9 +286,11 @@ public class Main {
                                         consistentCount++;
                                         System.out.println("  数据一致性: ✓ 一致");
                                     } else {
+                                        inconsistentQueryIndices.add(i + 1);
                                         System.out.println("  数据一致性: ✗ 不一致");
                                     }
                                 } else {
+                                    inconsistentQueryIndices.add(i + 1);
                                     System.out.println("  数据一致性: ✗ 行数或列数不一致");
                                 }
                                 
@@ -294,6 +304,7 @@ public class Main {
                                 }
                             } else {
                                 queryExecutionFailCount++;
+                                executionFailedQueryIndices.add(i + 1);
                                 System.out.println("  SQL执行失败:");
                                 if (!stats1.isSuccess()) {
                                     System.out.println("    原始SQL错误: " + stats1.getErrorMessage());
@@ -304,12 +315,15 @@ public class Main {
                             }
                         }
                     } else {
+                        noOptimizationCount++;
+                        noOptimizationQueryIndices.add(i + 1);
                         System.out.println("\n[优化结果] - 无需优化");
                     }
                     
                     connectionManager.closeConnection();
                 } catch (Exception e) {
                     failCount++;
+                    failedQueryIndices.add(i + 1);
                     System.out.println("\n[错误] ✗ " + e.getMessage());
                 }
             }
@@ -320,13 +334,14 @@ public class Main {
             System.out.println("\n统计信息:");
             System.out.println("  总SQL数: " + sqlList.size());
             System.out.println("  规则优化成功: " + optimizedCount);
-            System.out.println("  查询执行失败: " + queryExecutionFailCount);
-            System.out.println("  系统异常: " + failCount);
+            System.out.println("  无需优化条数: " + noOptimizationCount + (noOptimizationQueryIndices.isEmpty() ? "" : " (SQL #" + noOptimizationQueryIndices + ")"));
+            System.out.println("  查询执行失败: " + queryExecutionFailCount + (executionFailedQueryIndices.isEmpty() ? "" : " (SQL #" + executionFailedQueryIndices + ")"));
+            System.out.println("  系统异常: " + failCount + (failedQueryIndices.isEmpty() ? "" : " (SQL #" + failedQueryIndices + ")"));
             if (validate && consistentCount > 0) {
-                System.out.println("  结果一致: " + consistentCount + "/" + optimizedCount);
+                System.out.println("  结果一致: " + consistentCount + "/" + optimizedCount + (inconsistentQueryIndices.isEmpty() ? "" : " (不一致: SQL #" + inconsistentQueryIndices + ")"));
                 if (totalOriginalTime > 0) {
                     double totalImprovement = (double) (totalOriginalTime - totalOptimizedTime) / totalOriginalTime * 100;
-                    System.out.printf("  总体性能提升: %.1f%%%n", totalImprovement);
+                    System.out.printf("  总耗时降低: %.1f%%%n", totalImprovement);
                 }
             }
             
@@ -366,12 +381,13 @@ public class Main {
 
             for (String sql : sqlList) {
                 System.out.println("\n========== 处理SQL ==========");
-                System.out.println("原始SQL: " + sql);
+                SqlParser sqlParser = new SqlParser();
+                System.out.println("原始SQL: " + sqlParser.formatSqlToMultiLines(sql));
                 
                 try {
                     OptimizationResult result = optimizer.optimize(sql);
                     
-                    System.out.println("\n优化后SQL: " + result.getOptimizedSql());
+                    System.out.println("\n优化后SQL: " + sqlParser.formatSqlToMultiLines(result.getOptimizedSql()));
                     
                     if (verbose) {
                         System.out.println("\n=== 详细优化信息 ===");

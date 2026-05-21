@@ -12,20 +12,18 @@ public class UseExistsInsteadOfInRule implements OptimizationRule {
 
     @Override
     public String getName() {
-        return "UseExistsInsteadOfIn";
+        return "IN转EXISTS(UseExistsInsteadOfIn)";
     }
 
     @Override
     public String getDescription() {
-        return "Converts IN subqueries to EXISTS for better performance";
+        return "将IN子查询转换为EXISTS以提升性能";
     }
 
     @Override
     public boolean canApply(Statement statement, OptimizationContext context) {
-        if (!(statement instanceof Select)) {
-            return false;
-        }
-        return statement.toString().toUpperCase().contains("IN (SELECT");
+        // 暂时禁用，因为正则表达式有问题，可能导致结果不一致
+        return false;
     }
 
     @Override
@@ -44,26 +42,34 @@ public class UseExistsInsteadOfInRule implements OptimizationRule {
 
     private String convertInToExists(String sql) {
         String result = sql;
-        Pattern pattern = Pattern.compile("(?i)(\\w+)\\s+IN\\s*\\((SELECT\\s+)(\\w+)\\s+FROM\\s+(\\w+)(.*?)\\)");
-        Matcher matcher = pattern.matcher(result);
         
+        Pattern pattern = Pattern.compile(
+            "(?i)([^\\s]+)\\s+IN\\s*\\(\\s*SELECT\\s+([^\\s]+)\\s+FROM\\s+([^\\s]+)\\s*(?:WHERE\\s+([^)]+))?\\s*\\)",
+            Pattern.CASE_INSENSITIVE
+        );
+        Matcher matcher = pattern.matcher(result);
         StringBuffer sb = new StringBuffer();
+        
         while (matcher.find()) {
             String leftColumn = matcher.group(1);
-            String selectPrefix = matcher.group(2);
-            String rightColumn = matcher.group(3);
-            String tableName = matcher.group(4);
-            String restOfQuery = matcher.group(5);
+            String selectColumn = matcher.group(2);
+            String tableName = matcher.group(3);
+            String whereClause = matcher.group(4);
             
-            String replacement = String.format(
-                "EXISTS (%s1 FROM %s%s WHERE %s = %s)",
-                selectPrefix, tableName, restOfQuery, tableName + "." + rightColumn, leftColumn
-            );
+            String replacement;
+            if (whereClause != null && !whereClause.trim().isEmpty()) {
+                replacement = "EXISTS (SELECT 1 FROM " + tableName + " WHERE " + 
+                             tableName + "." + selectColumn + " = " + leftColumn + 
+                             " AND " + whereClause + ")";
+            } else {
+                replacement = "EXISTS (SELECT 1 FROM " + tableName + " WHERE " + 
+                             tableName + "." + selectColumn + " = " + leftColumn + ")";
+            }
             
             matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         }
-        matcher.appendTail(sb);
         
+        matcher.appendTail(sb);
         return sb.toString();
     }
 }
